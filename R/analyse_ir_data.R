@@ -30,15 +30,49 @@ file.copy(file_path, new_file_path)
 
 # now we can read in the data
 library(tidyverse)
-ir_data_raw <- read_csv(file = new_file_path)
+# ir_data_raw <- read_csv(file = new_file_path)
 # spec(ir_data_raw)
+
+ir_data_raw <- read_csv(file = new_file_path,
+                        na = c("", "NA", "NR", "NF"),
+                        col_types = cols(
+                          `Start month` = col_integer(),
+                          `Start year` = col_integer(),
+                          `End month` = col_integer(),
+                          `End year` = col_integer(),
+                          Species = col_character(),
+                          `Identification method 1` = col_character(),
+                          Generation = col_character(),
+                          `Test protocol` = col_character(),
+                          `Insecticide tested` = col_character(),
+                          `Insecticide class` = col_character(),
+                          `Concentration (%)` = col_double(),
+                          `No. mosquitoes tested` = col_integer(),
+                          `Percent mortality` = col_double(),
+                          Country = col_character(),
+                          `Site type` = col_character(),
+                          `Site name` = col_character(),
+                          Latitude = col_double(),
+                          Longitude = col_double(),
+                          .default = col_guess()
+                        ))
 
 # let's subset this down to the data we want to work with
 ir_data <- ir_data_raw %>%
-  # we'll only keep the records that have specific point locations, and the percent mortality is given (most of them)
+  # we'll only keep the records that have specific point locations, and the
+  # percent mortality is given (this is most of them)
   filter(
+    # only records with specific point locations
     `Site type` == "point",
-    !is.na(`Percent mortality`)
+    !is.na(Latitude),
+    !is.na(Longitude),
+    # make sure we know the mortality and the concentration
+    !is.na(`Percent mortality`),
+    !is.na(`Concentration (%)`),
+    # only records we are sure were collected in one year
+    !is.na(`Start year`),
+    !is.na(`End year`),
+    `Start year` == `End year`
   ) %>%
   select(
     Species,
@@ -49,11 +83,55 @@ ir_data <- ir_data_raw %>%
     `Concentration (%)`,
     `No. mosquitoes tested`,
     `Percent mortality`,
+    `Start year`,
     Country,
     `Site name`,
     Longitude,
     Latitude
+  ) %>%
+  # we're only using single-year data, so rename this column to somehting more
+  # meaningful
+  rename(
+    Year = `Start year`
   )
 
-summary(ir_data)
+# how many observations of each insecticide and concentration (note each
+# insecticide is only with one concentration)
+ir_data %>%
+  group_by(
+    `Insecticide class`,
+    `Insecticide tested`,
+    `Concentration (%)`
+  ) %>%
+  summarise(
+    Records = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(
+    `Insecticide class`,
+    desc(Records)
+  )
 
+# find point locations, years, species, and insecticides with multiple
+# records
+ir_data %>%
+  group_by(
+    Species,
+    `Insecticide tested`,
+    Country,
+    `Site name`,
+    Longitude,
+    Latitude,
+    Year,
+  ) %>%
+  summarise(
+    Records = n(),
+    .groups = "drop"
+  ) %>%
+  filter(
+    Records > 1
+  ) %>%
+  arrange(
+    desc(Records)
+  )
+  
